@@ -4596,7 +4596,15 @@ class ClaudeAccountSwitcher:
                         # this write. A timeout here is a live-write failure
                         # (the grant is already consumed), not a defer.
                         with claude_config_lock():
-                            self._write_credentials(working)  # active store — CC reads this
+                            # active store — CC reads this. Composed with the
+                            # live siblings (mcpOAuth, a kept designOauth) so a
+                            # backup-sourced refresh doesn't put the slot's
+                            # stale copies of them back.
+                            self._write_credentials(
+                                self._prepare_credentials_for_activation(
+                                    working, live
+                                )
+                            )
                     except Exception:
                         live_ok = False
                         self._logger.warning(

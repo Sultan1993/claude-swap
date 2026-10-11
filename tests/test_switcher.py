@@ -2321,6 +2321,39 @@ class TestActiveAccountRefresh:
         write_backup.assert_not_called()          # backup already holds it
         assert mock_fetch.call_args[0][2] == successor
 
+    def test_restore_keeps_the_live_design_login(
+        self, temp_home: Path, mock_claude_config: Path, sample_sequence_data: dict
+    ):
+        """The restore writes the slot's login, not the slot's stale copy of a
+        design login kept live with swap.designLogin off."""
+        switcher = self._switcher(sample_sequence_data)
+        set_setting(switcher.backup_dir, "swap.designLogin", "false")
+        live = json.dumps({
+            **json.loads(self._EXPIRED), "designOauth": {"refreshToken": "d-live"},
+        })
+        successor = json.dumps({
+            "claudeAiOauth": {
+                "accessToken": "sk-successor", "refreshToken": "rt-successor",
+                "expiresAt": 9999999999000,
+            },
+            "designOauth": {"refreshToken": "d-stale"},
+        })
+
+        with patch.object(switcher, "_read_credentials", return_value=live), \
+             patch.object(
+                 switcher, "_read_account_credentials", return_value=successor
+             ), \
+             patch.object(switcher, "_write_credentials") as write_live, \
+             patch.object(switcher, "_write_account_credentials"), \
+             patch("claude_swap.oauth.try_refresh_oauth_credentials"), \
+             patch("claude_swap.oauth.try_fetch_usage_for_account",
+                   return_value=oauth.UsageOutcome({"five_hour": {"pct": 5}})):
+            switcher._fetch_active_usage("1", "test@example.com", live)
+
+        written = json.loads(write_live.call_args[0][0])
+        assert written["claudeAiOauth"]["refreshToken"] == "rt-successor"
+        assert written["designOauth"] == {"refreshToken": "d-live"}
+
     def test_identity_check_compares_organization_too(
         self, temp_home: Path, mock_claude_config: Path, sample_sequence_data: dict
     ):
