@@ -2,6 +2,25 @@
 
 Multi-account switcher for Claude Code. Easily switch between multiple Claude accounts without logging out, or let it switch for you before you hit a rate limit. Track usage for every account in a live dashboard, and run accounts in parallel. Works with both the Claude Code CLI and the VS Code extension.
 
+> **This is a fork** of [realiti4/claude-swap](https://github.com/realiti4/claude-swap), based on v0.26.0, on the `design-login` branch. For everything else, see the [upstream README](https://github.com/realiti4/claude-swap#readme). The rest of this file is that README plus notes on what the fork adds.
+
+## What this fork adds
+
+- **One Claude Design login kept across Code switches.** Upstream PR [#349](https://github.com/realiti4/claude-swap/pull/349) (`swap.designLogin`): a Claude Code account switch no longer drops your `/design-login`. See [One Claude Design login for every account](#one-claude-design-login-for-every-account).
+- **Claude Design logins switched on their own.** `cswap design add|use|next|remove` saves several design logins and puts any one of them live, whichever Code account is active. See [Switch Claude Design logins separately](#switch-claude-design-logins-separately).
+- **Reorganised menu bar.** Code accounts at the top with a *Switch* submenu; a *Claude Design: &lt;name&gt;* submenu; add, remove and disable for both under *Manage accounts*; one switch history with each entry tagged *Code* or *Design*.
+- **Refresh fix.** When cswap refreshes or restores the active account from its backup, it keeps the live `mcpOAuth` and design login instead of putting the slot's stale copies back.
+
+### Install the fork
+
+```bash
+pipx install --force 'claude-swap[menubar] @ git+https://github.com/Sultan1993/claude-swap@design-login'
+# or: uv tool install --force 'claude-swap[menubar] @ git+https://github.com/Sultan1993/claude-swap@design-login'
+launchctl kickstart -k gui/$(id -u)/com.cswap.menubar   # if the menu bar runs as a service
+```
+
+`cswap upgrade` installs upstream from PyPI and replaces the fork, so update with the command above instead.
+
 ## Installation
 
 ### Using uv (recommended)
