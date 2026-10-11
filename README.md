@@ -1,6 +1,6 @@
 # claude-swap (Claude Design fork)
 
-A fork of [realiti4/claude-swap](https://github.com/realiti4/claude-swap), based on v0.26.0, that adds Claude Design login switching. For installation, usage and everything else, see the original repo.
+A fork of [realiti4/claude-swap](https://github.com/realiti4/claude-swap), kept on top of its `main`, that adds Claude Design login switching. For installation, usage and everything else, see the original repo.
 
 ## What this fork adds
 
