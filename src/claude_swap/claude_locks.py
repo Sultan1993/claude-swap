@@ -76,6 +76,12 @@ def oauth_refresh_lock_dir() -> Path:
     return get_claude_config_home() / ".oauth_refresh.lock"
 
 
+def design_refresh_lock_dir() -> Path:
+    """Claude Code's Claude Design token refresh lock
+    (``<config-home>/.design_oauth_refresh.lock``)."""
+    return get_claude_config_home() / ".design_oauth_refresh.lock"
+
+
 def config_lock_dir() -> Path:
     """Lock directory guarding the global config file (``~/.claude.json.lock``)."""
     path = get_global_config_path()

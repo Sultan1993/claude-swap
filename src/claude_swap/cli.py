@@ -575,6 +575,75 @@ Examples:
         sys.exit(130)
 
 
+def _design_command(argv: list[str]) -> None:
+    """Handle `cswap design [list|add NAME|use NAME|next|remove NAME]`."""
+    from claude_swap import design
+
+    parser = argparse.ArgumentParser(
+        prog="cswap design",
+        description=(
+            "Keep several Claude Design logins and switch them independently "
+            "of the Claude Code account. Add one by running /design-login in "
+            "Claude Code (pick the account in the browser), then "
+            "`cswap design add NAME`."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  cswap design                        # list saved Design logins
+  cswap design add personal           # save the live /design-login as 'personal'
+  cswap design use work
+  cswap design next                   # rotate to the next saved login
+  cswap design remove work
+        """,
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    sub = parser.add_subparsers(dest="action", metavar="{list,add,use,next,remove}")
+    sub.add_parser("list", help="List saved Design logins (the default)")
+    for verb, text in (
+        ("add", "Save the live Design login under NAME"),
+        ("use", "Make NAME the live Design login"),
+        ("remove", "Forget a saved Design login"),
+    ):
+        sub.add_parser(verb, help=text).add_argument("name", metavar="NAME")
+    sub.add_parser("next", help="Rotate to the next saved Design login")
+    args = parser.parse_args(argv)
+
+    try:
+        switcher = ClaudeAccountSwitcher(debug=args.debug)
+        _guard_root(switcher)
+        action = args.action or "list"
+        if action == "list":
+            names, active = design.load_state(switcher)
+            if not names:
+                print(dimmed("No Design logins saved"))
+            for name in names:
+                print(f"{'*' if name == active else ' '} {name}")
+        elif action == "add":
+            design.add(switcher, args.name)
+            print(f"{accent('Saved Design login')} '{args.name}'")
+        elif action == "use":
+            if design.use(switcher, args.name):
+                print(f"{accent('Switched Design login to')} '{args.name}'")
+            else:
+                print(f"{accent('Already on')} '{args.name}'")
+        elif action == "next":
+            name = design.rotate(switcher)
+            print(
+                f"{accent('Switched Design login to')} '{name}'" if name
+                else dimmed("No other Design login to rotate to")
+            )
+        elif action == "remove":
+            design.remove(switcher, args.name)
+            print(f"{accent('Removed Design login')} '{args.name}'")
+    except ClaudeSwitchError as e:
+        error(f"Error: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print(f"\n{dimmed('Operation cancelled')}")
+        sys.exit(130)
+
+
 def _auto_command(argv: list[str]) -> None:
     """Handle `cswap auto [--once] [--json] [...]`.
 
@@ -1013,6 +1082,9 @@ def main() -> None:
     if argv and argv[0] == "alias":
         _alias_command(argv[1:])
         return
+    if argv and argv[0] == "design":
+        _design_command(argv[1:])
+        return
     if argv and argv[0] == "swap":
         _swap_command(argv[1:])
         return
@@ -1057,6 +1129,7 @@ Commands:
   %(prog)s alias                      list all aliases
   %(prog)s swap <a> <b>               exchange two accounts' slot numbers
   %(prog)s move <a> <slot>            assign an account to a slot (swaps if taken)
+  %(prog)s design [add|use|next|remove] switch Claude Design logins separately
   %(prog)s auto                       auto-switch when nearing rate limits
   %(prog)s config [set KEY VALUE]     show or change settings (settings.json)
   %(prog)s unclaimed [--purge ID]     list or drop stashed credential entries

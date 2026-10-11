@@ -419,8 +419,19 @@ _SWITCH_LOG = (
 
 def test_parse_switch_history_most_recent_first():
     assert menubar.parse_switch_history(_SWITCH_LOG) == [
-        "3 → 1   2026-06-27 02:10",
-        "1 → 3   2026-06-27 00:57",
+        "Code  3 → 1   2026-06-27 02:10",
+        "Code  1 → 3   2026-06-27 00:57",
+    ]
+
+
+def test_parse_switch_history_includes_design_switches():
+    log = (
+        "2026-06-27 01:00:00,000 - INFO - Switched from account 1 to 2\n"
+        "2026-06-27 02:00:00,000 - INFO - Switched Design login from personal to work\n"
+    )
+    assert menubar.parse_switch_history(log) == [
+        "Design  personal → work   2026-06-27 02:00",
+        "Code  1 → 2   2026-06-27 01:00",
     ]
 
 
@@ -431,7 +442,7 @@ def test_parse_switch_history_respects_limit():
     )
     out = menubar.parse_switch_history(lines, limit=2)
     assert len(out) == 2
-    assert out[0] == "1 → 2   2026-06-27 05:00"  # newest first
+    assert out[0] == "Code  1 → 2   2026-06-27 05:00"  # newest first
 
 
 def test_parse_switch_history_empty_or_no_matches():

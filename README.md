@@ -246,7 +246,7 @@ uv tool install 'claude-swap[menubar]'   # or: pipx install 'claude-swap[menubar
 cswap menubar
 ```
 
-Shows every account's 5h / 7d / spend usage and switches with a click (specific / rotate / best / next-available), plus the TUI's add / disable-enable / remove / refresh actions. Enable *Settings → Auto-switch accounts* to run the same engine as [`cswap auto`](#automatic-switching) in the background; it shares the `autoswitch.*` settings, so the menu bar and CLI stay in sync. Off until you turn it on.
+Shows every account's 5h / 7d / spend usage and switches with a click (specific / rotate / best / next-available), plus the TUI's add / disable-enable / remove / refresh actions (under *Manage accounts*). A *Claude Design* submenu switches [design logins](#switch-claude-design-logins-separately) on their own. Enable *Settings → Auto-switch accounts* to run the same engine as [`cswap auto`](#automatic-switching) in the background; it shares the `autoswitch.*` settings, so the menu bar and CLI stay in sync. Off until you turn it on.
 
 **Keep it running without a terminal.** `cswap menubar` runs in the foreground, so the status item dies with the terminal that started it and does not come back after a reboot. `--install-service` hands it to launchd instead — starts at login, restarts on crash, no `.app` bundle:
 
@@ -296,6 +296,24 @@ Then run `/design-login` once, from any account. Switches leave that credential 
 
 - **`/login` and `/logout` revoke it.** Claude Code revokes the design credential whenever you log in or out, and a revoked token cannot be restored from a backup. Add your accounts first and run `/design-login` last.
 - **Slots still keep copies.** A switch still backs the live design login up into the slot you leave. `cswap run` sessions start from that copy, and turning the setting back on restores each slot's copy, so run `/design-login` again in either case.
+
+### Switch Claude Design logins separately
+
+To keep several design logins and pick one independently of the Code account:
+
+```bash
+# in Claude Code: /design-login, pick the account in the browser, then
+cswap design add personal       # save the live design login as 'personal' (sets swap.designLogin false)
+cswap design                    # list; * marks the live one
+cswap design use work
+cswap design next               # rotate to the next saved login
+cswap design remove work
+```
+
+The menu bar has the same under *Claude Design* and *Manage accounts → Claude Design*.
+
+- **Add before you switch.** A design token carries no account id, so cswap cannot tell a new `/design-login` from a refreshed one: the live token is saved back to the active name before each switch. After a `/design-login`, run `cswap design add` first.
+- **`/login` and `/logout` still revoke the live one** (see above). Run `/design-login` again and `cswap design add` it under the same name; the other saved logins are separate grants and keep working.
 
 ### Backup and migration
 

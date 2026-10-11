@@ -368,23 +368,25 @@ def _usage_log_key(usage: dict | str | None) -> tuple[float | None, float | None
     return (_window_pct(usage, "five_hour"), _window_pct(usage, "seven_day"))
 
 
-_SWITCH_LOG_RE = re.compile(r"Switched from account (\d+) to (\d+)")
+_SWITCH_LOG_RE = re.compile(r"Switched (Design login )?from (?:account )?(\S+) to (\S+)")
 
 
 def parse_switch_history(log_text: str, limit: int = SWITCH_HISTORY_LIMIT) -> list[str]:
-    """Recent account switches from the log, most-recent first.
+    """Recent Code and Design switches from the log, most-recent first.
 
-    Reads the ``Switched from account X to Y`` lines the switcher logs and pairs
-    each with its timestamp (trimmed to the minute). Returns at most ``limit``
-    entries like ``"3 → 1   2026-06-27 02:06"``. Any unparseable line is skipped.
+    Reads the ``Switched from account X to Y`` and ``Switched Design login from
+    X to Y`` lines and pairs each with its timestamp (trimmed to the minute).
+    Returns at most ``limit`` entries like ``"Code  3 → 1   2026-06-27 02:06"``.
+    Any unparseable line is skipped.
     """
     out: list[str] = []
     for line in log_text.splitlines():
         m = _SWITCH_LOG_RE.search(line)
         if not m:
             continue
+        kind = "Design" if m.group(1) else "Code"
         stamp = line.split(" - ", 1)[0].strip()[:16]  # "YYYY-MM-DD HH:MM"
-        out.append(f"{m.group(1)} → {m.group(2)}   {stamp}")
+        out.append(f"{kind}  {m.group(2)} → {m.group(3)}   {stamp}")
     return out[-limit:][::-1]
 
 
@@ -548,6 +550,7 @@ def run(switcher) -> int:
     )
 
     from claude_swap.autoswitch import AutoSwitchEngine
+    from claude_swap import design
     from claude_swap.settings import load_settings, set_setting
     from claude_swap.snapshot_source import SnapshotSource
 
@@ -772,23 +775,58 @@ def run(switcher) -> int:
             if not account_items:
                 account_items.append(rumps.MenuItem("No managed accounts", callback=None))
 
+            switch_menu = rumps.MenuItem("Switch")
+            switch_menu.add(rumps.MenuItem("Rotate to next", callback=self._switch(None)))
+            switch_menu.add(rumps.MenuItem("Switch to best", callback=self._switch("best")))
+            switch_menu.add(
+                rumps.MenuItem("Next available", callback=self._switch("next-available"))
+            )
+
             self.menu = [
+                rumps.MenuItem("Claude Code", callback=None),
                 *account_items,
+                switch_menu,
                 None,
-                rumps.MenuItem("Rotate to next", callback=self._switch(None)),
-                rumps.MenuItem("Switch to best", callback=self._switch("best")),
-                rumps.MenuItem("Next available", callback=self._switch("next-available")),
+                self._design_menu(rumps),
                 None,
-                self._add_menu(rumps),
-                self._disable_menu(rumps),
-                self._remove_menu(rumps),
-                rumps.MenuItem("Refresh current credentials", callback=self.on_refresh_creds),
+                self._manage_menu(rumps),
                 self._history_menu(rumps),
-                None,
                 self._settings_menu(rumps),
                 rumps.MenuItem("Refresh now", callback=self.on_refresh_now),
                 rumps.MenuItem("Quit", callback=self.on_quit),
             ]
+
+        def _design_menu(self, rumps):
+            names, active = design.load_state(self.switcher)
+            menu = rumps.MenuItem(f"Claude Design: {active or 'none'}")
+            if not names:
+                menu.add(rumps.MenuItem("No Design logins saved", callback=None))
+            for name in names:
+                item = rumps.MenuItem(name, callback=self._make_design_use(name))
+                item.state = 1 if name == active else 0
+                menu.add(item)
+            menu.add(None)
+            menu.add(rumps.MenuItem("Rotate to next", callback=self.on_design_rotate))
+            return menu
+
+        def _manage_menu(self, rumps):
+            menu = rumps.MenuItem("Manage accounts")
+            menu.add(rumps.MenuItem("Claude Code", callback=None))
+            menu.add(self._add_menu(rumps))
+            menu.add(self._remove_menu(rumps))
+            menu.add(self._disable_menu(rumps))
+            menu.add(rumps.MenuItem("Refresh current credentials", callback=self.on_refresh_creds))
+            menu.add(None)
+            menu.add(rumps.MenuItem("Claude Design", callback=None))
+            menu.add(rumps.MenuItem("Add current Design login…", callback=self.on_design_add))
+            remove = rumps.MenuItem("Remove Design login")
+            names, _active = design.load_state(self.switcher)
+            if not names:
+                remove.add(rumps.MenuItem("No Design logins saved", callback=None))
+            for name in names:
+                remove.add(rumps.MenuItem(name, callback=self._make_design_remove(name)))
+            menu.add(remove)
+            return menu
 
         def _add_menu(self, rumps):
             menu = rumps.MenuItem("Add account")
@@ -969,6 +1007,50 @@ def run(switcher) -> int:
                 token=token_resp.text.strip(), email=email_resp.text.strip(), slot=None,
             )):
                 self.refresh_async()
+
+        def _design_switch(self, fn):
+            try:
+                changed = fn()
+            except ClaudeSwitchError as e:
+                rumps.alert(title="claude-swap", message=str(e))
+                return
+            if changed:
+                rumps.notification(
+                    "claude-swap", "Claude Design login switched",
+                    "Claude Code picks it up within ~30s.",
+                )
+            self.rebuild_menu()
+
+        def _make_design_use(self, name):
+            return lambda _sender: self._design_switch(
+                lambda: design.use(self.switcher, name)
+            )
+
+        def on_design_rotate(self, _sender):
+            self._design_switch(lambda: design.rotate(self.switcher))
+
+        def on_design_add(self, _sender):
+            import AppKit  # see on_add_token: bring the accessory app forward
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+            resp = rumps.Window(
+                title="Add current Design login",
+                message="Run /design-login in Claude Code first. Name for this login "
+                        "(e.g. the account's email):",
+                ok="Save", cancel="Cancel", dimensions=(320, 24),
+            ).run()
+            if resp.clicked == 1 and resp.text.strip():
+                if self._guard(lambda: design.add(self.switcher, resp.text.strip())):
+                    self.rebuild_menu()
+
+        def _make_design_remove(self, name):
+            def cb(_sender):
+                if rumps.alert(
+                    title="Remove Design login",
+                    message=f"Forget the saved Design login {name!r}?",
+                    ok="Remove", cancel="Cancel",
+                ) == 1 and self._guard(lambda: design.remove(self.switcher, name)):
+                    self.rebuild_menu()
+            return cb
 
         def on_open_log(self, _sender):
             import subprocess
