@@ -12,8 +12,8 @@ A fork of [realiti4/claude-swap](https://github.com/realiti4/claude-swap), based
 ## Install
 
 ```bash
-pipx install --force 'claude-swap[menubar] @ git+https://github.com/Sultan1993/claude-swap@design-login'
-# or: uv tool install --force 'claude-swap[menubar] @ git+https://github.com/Sultan1993/claude-swap@design-login'
+pipx install --force 'claude-swap[menubar] @ git+https://github.com/Sultan1993/claude-swap'
+# or: uv tool install --force 'claude-swap[menubar] @ git+https://github.com/Sultan1993/claude-swap'
 launchctl kickstart -k gui/$(id -u)/com.cswap.menubar   # if the menu bar runs as a service
 ```
 
